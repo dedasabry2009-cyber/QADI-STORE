@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QADI — Admin Panel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+--dark:#0F172A;
+--gray:#64748B;
+--border:#E5E7EB;
+--danger:#DC2626;
+}
+body{
+font-family:Inter,sans-serif;
+background:#F1F5F9;
+padding:40px 16px;
+}
+.admin{max-width:720px;margin:auto}
+.card{
+background:#fff;
+padding:26px;
+border-radius:18px;
+box-shadow:0 10px 30px rgba(0,0,0,.08);
+margin-bottom:24px;
+}
+h1{margin-bottom:20px}
+input,textarea,button{
+width:100%;
+padding:14px;
+margin-bottom:14px;
+border-radius:12px;
+border:1px solid var(--border);
+font-family:inherit;
+}
+textarea{min-height:90px;resize:vertical}
+button{
+background:var(--dark);
+color:#fff;
+border:none;
+font-weight:600;
+cursor:pointer;
+}
+.product{
+border:1px solid var(--border);
+padding:14px;
+border-radius:14px;
+margin-bottom:14px;
+}
+.images{
+display:flex;
+gap:6px;
+flex-wrap:wrap;
+margin-top:8px;
+}
+.images img{
+width:55px;height:70px;
+object-fit:cover;border-radius:8px;
+}
+.actions{
+display:flex;
+gap:8px;
+margin-top:10px;
+}
+.small{
+padding:10px;
+font-size:12px;
+border-radius:10px;
+}
+.edit{background:#334155;color:#fff}
+.delete{background:var(--danger);color:#fff}
+.status{
+margin-bottom:12px;
+font-size:13px;
+color:green;
+}
+.error{color:red}
+</style>
+</head>
+
+<body>
+
+<div class="admin">
+<h1>QADI Admin Panel</h1>
+
+<div id="status" class="status">Connecting…</div>
+
+<div class="card">
+<input id="name" placeholder="Product Name">
+<input id="price" type="number" placeholder="Price (EGP)">
+<textarea id="description" placeholder="Product Description"></textarea>
+<input id="images" placeholder="Image URLs (comma separated)">
+<button onclick="saveProduct()">Save Product</button>
+</div>
+
+<div id="list"></div>
+</div>
+
+<script type="module">
+/* ========== FIREBASE ========== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+getFirestore,
+collection,
+addDoc,
+getDocs,
+doc,
+updateDoc,
+deleteDoc
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+import {
+getAuth,
+signInAnonymously,
+onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+/* CONFIG */
+const firebaseConfig = {
+apiKey: "AIzaSyA8u5RLYMptkeS_6wqeyds2o3flnAbHrZ4",
+authDomain: "qadi-store-42cde.firebaseapp.com",
+projectId: "qadi-store-42cde"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+const statusEl = document.getElementById("status");
+
+/* AUTH */
+signInAnonymously(auth).catch(err=>{
+statusEl.textContent = err.message;
+statusEl.classList.add("error");
+});
+
+onAuthStateChanged(auth,user=>{
+if(user){
+statusEl.textContent = "Connected ✔";
+loadProducts();
+}
+});
+
+/* ELEMENTS */
+const nameInput = document.getElementById("name");
+const priceInput = document.getElementById("price");
+const descInput = document.getElementById("description");
+const imagesInput = document.getElementById("images");
+const list = document.getElementById("list");
+
+let editId = null;
+
+/* LOAD */
+async function loadProducts(){
+list.innerHTML="";
+const snap = await getDocs(collection(db,"products"));
+snap.forEach(d=>{
+const p = d.data();
+list.innerHTML += `
+<div class="product">
+<strong>${p.name}</strong><br>
+${p.price} EGP<br>
+<small>${p.description || ""}</small>
+
+<div class="images">
+${(p.images||[]).map(img=>`<img src="${img}">`).join("")}
+</div>
+
+<div class="actions">
+<button class="small edit" onclick="editProduct('${d.id}')">Edit</button>
+<button class="small delete" onclick="deleteProduct('${d.id}')">Delete</button>
+</div>
+</div>`;
+});
+}
+
+/* SAVE */
+window.saveProduct = async ()=>{
+if(!nameInput.value || !priceInput.value){
+alert("اكتب الاسم والسعر");
+return;
+}
+
+const images = imagesInput.value
+.split(",")
+.map(i=>i.trim())
+.filter(i=>i);
+
+const data = {
+name: nameInput.value,
+price: Number(priceInput.value),
+description: descInput.value,
+images,
+createdAt: Date.now()
+};
+
+if(editId){
+await updateDoc(doc(db,"products",editId),data);
+editId = null;
+}else{
+await addDoc(collection(db,"products"),data);
+}
+
+nameInput.value="";
+priceInput.value="";
+descInput.value="";
+imagesInput.value="";
+loadProducts();
+};
+
+/* EDIT */
+window.editProduct = async (id)=>{
+const snap = await getDocs(collection(db,"products"));
+snap.forEach(d=>{
+if(d.id === id){
+const p = d.data();
+nameInput.value = p.name;
+priceInput.value = p.price;
+descInput.value = p.description || "";
+imagesInput.value = (p.images||[]).join(", ");
+editId = id;
+}
+});
+};
+
+/* DELETE */
+window.deleteProduct = async (id)=>{
+if(confirm("Delete product?")){
+await deleteDoc(doc(db,"products",id));
+loadProducts();
+}
+};
+</script>
+
+</body>
+</html>
